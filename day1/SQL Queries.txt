@@ -1,0 +1,116 @@
+create table Employee (
+EmpId Int Primary key,
+Ename varchar,
+Esal varchar,
+Dept varchar);
+
+Alter table Employee 
+Alter column  Ename varchar(100);
+Alter table Employee 
+Alter column Esal Int;
+Alter table Employee 
+Alter column Dept varchar(100);
+
+Alter Table Employee Add  DeptNo Int;
+
+select * from Employee;
+
+Insert into Employee (EmpId,Ename,Esal,Dept,DeptNo) values (1,'Jeet',100,'Sales',10);
+Insert into Employee (EmpId,Ename,Esal,Dept,DeptNo) values (2,'Adnan',200,'Manager',20);
+Insert into Employee (EmpId,Ename,Esal,Dept,DeptNo) values (3,'Bilal',300,'Clerk',30);
+Insert into Employee (EmpId,Ename,Esal,Dept,DeptNo) values (4,'Arjun',200,'Sales',10);
+
+create table Department (
+DeptId Int Primary key,
+Dname varchar(100),
+Dloc varchar(100),
+DeptNo int);
+
+Insert into Department (DeptId,Dname,Dloc,DeptNo) values (1,'A','Mumbai',10);
+Insert into Department (DeptId,Dname,Dloc,DeptNo) values (2,'B','Thane',20);
+Insert into Department (DeptId,Dname,Dloc,DeptNo) values (3,'C','Goa',10);
+Insert into Department (DeptId,Dname,Dloc,DeptNo) values (4,'D','Dubai',30);
+Insert into Department (DeptId,Dname,Dloc,DeptNo) values (5,'E','UK',40);
+
+select * from Department;
+
+select * from Employee
+go
+select  * from Department
+
+select Ename,Dept from Employee
+union all
+select Dname,Dloc from Department 
+
+select Esal ,Esal-50 as Salary
+from Employee
+
+select Ename ,Dept ,case when Esal>=100 and Esal<200 then 'Good'
+                         when Esal>=200 and Esal<300 then 'Better'
+						 when Esal>=300 then 'Best'
+				     end
+from Employee;
+
+select Ename ,DeptNo from Employee
+union  
+Select Dname,DeptNo from Department
+
+Alter Table Employee Add CONSTRAINT DeptNo_Fk Foreign Key (EmpId)
+References Department  (DeptId);
+
+ALTER TABLE Employee
+ADD CONSTRAINT FK_Emp_Dept
+FOREIGN KEY (DeptNo)
+REFERENCES Department(DeptNo);
+
+select Ename,Dname from Employee inner join Department
+on Employee.DeptNo	=Department.DeptNo
+
+SELECT Ename,Dname from Employee
+cross Join Department
+
+select Ename,Dname from Employee
+left Join Department
+on Employee.DeptNo=Department.DeptNo
+
+select Ename,Dname From Employee
+right join Department
+on Employee.DeptNo=Department.DeptNo
+
+select Ename,Dname From Employee
+full join Department
+on Employee.DeptNo=Department.DeptNo
+
+SELECT Ename,Dname ,Dloc
+from Employee,Department
+where Employee.DeptNo=10;
+--where Employee.DeptNo=Department.DeptNo
+
+SELECT  Sum(Esal),DeptNo
+from Employee
+Group by DeptNo
+having count(*)=1
+
+Select * from Employee 
+order by Esal desc
+
+select Max(Esal)as MaximumSalary
+from Employee
+where Esal<(select Max(Esal)
+from Employee
+where Esal <(select Max(Esal)
+from Employee))
+
+WITH RankedSalaries AS (
+  SELECT  Esal,
+         ROW_NUMBER() OVER (ORDER BY Esal DESC) AS SalaryRank
+  FROM Employee
+)
+SELECT   Esal
+FROM RankedSalaries
+WHERE SalaryRank=4;
+
+select E1.Esal from Employee E1
+where 4>(select count(*)
+from Employee E2
+where E2.Esal>=E1.Esal)
