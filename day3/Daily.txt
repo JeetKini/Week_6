@@ -1,0 +1,84 @@
+public ResponseInfo GetDailyAttendanceReport(int loggedInUserId, UserReport userReport)
+{
+    var info = GetAllUsersDetailReport(loggedInUserId, userReport);
+
+    if (info.Status == 200)
+    {
+        var userReportData = (List<GC_USP_GetCompanyUsersDetailReport_Result>)info.data;
+
+        if (userReportData != null)
+        {
+            using (ChatOnGoEntities _db = new ChatOnGoEntities())
+            {
+                // Fetching PunchInDevice data
+                var punchInDeviceData = _db.GCCheckInCheckOuts
+                    .Where(c => c.UserId == c.UserId)
+                    .OrderByDescending(c => c.CheckInTime)
+                    .Select(c => c.PunchedInDevice)
+                    .FirstOrDefault();
+
+                // Fetching PunchOutDevice data
+                var punchOutDeviceData = _db.GCCheckInCheckOuts
+                    .Where(c => c.UserId == c.UserId)
+                    .OrderByDescending(c => c.CheckInTime)
+                    .Select(c => c.PunchedOutDevice)
+                    .FirstOrDefault();
+
+                var data = userReportData.Select(x => new
+                {
+                    Id = x.Id,
+                    UserId = x.UserId,
+                    UserName = x.UserName,
+                    IsCheckedIn = x.IsCheckedIn,
+                    IsCheckedOut = x.IsCheckedOut ?? false,
+                    CheckInTime = x.CheckInTime.ToString("MM-dd-yyyy hh:mm:ss tt"),
+                    CheckOutTime = x.CheckOutTime?.ToString("MM-dd-yyyy hh:mm:ss tt") ?? string.Empty,
+                    TotalTime = x.TotalTime ?? string.Empty,
+                    WorkingMinutes = x.WorkingMinutes,
+                    CheckInType = x.CheckInType,
+                    Report = x.Report,
+                    PunchInReport = x.PunchInReport,
+                    Workstation = x.Workstation,
+                    CheckInGeoFence = string.IsNullOrEmpty(x.CheckInGeoFence) ? "-" : x.CheckInGeoFence,
+                    CheckOutGeoFence = string.IsNullOrEmpty(x.CheckOutGeoFence) ? "-" : x.CheckOutGeoFence,
+                    IsModifiedByAdmin = x.IsModifiedByAdmin,
+                    ModifiedBy = x.ModifiedBy,
+                    PunchInDevice = punchInDeviceData ?? string.Empty,
+                    PunchOutDevice = punchOutDeviceData ?? string.Empty
+                });
+
+                info.SetSuccess(data);
+            }
+        }
+    }
+    return info;
+}
+
+
+
+d:402587	
+UderId:1248
+CheckIN:	1
+CheckOut:	1
+CheckInTIme	:2024-01-22 04:38:34.090
+CheckOutTime:	2024-01-22 04:40:49.690
+CheckIN Latitude:	18.9953390
+CheckInLongitude:	72.8272430	
+CheckOut Latitude:18.9953270
+	CheckOutLongitude72.8272290
+Total time:	0hrs:2min
+Report:	aswsd
+Create Date:	2024-01-22 04:38:34.090	
+CreatedBy:1248
+Modifieddate:	2024-01-22 04:40:49.690
+ModifiedBy:	1248
+CheckInType:	1
+WorkingTime:	2
+IsModifiedByAdmin:	0
+CheckInLocalTIme:	2024-01-22 10:08:34.090
+CheckOutLocalTime: 	2024-01-22 10:10:49.690
+CheckIn Locatioin:	49 A, 4th Floor, A wing, Todi Estate, Sun Mill Compound, Senapati Bapat Marg, Lower Parel, Mumbai, Maharashtra 400013, India
+CheckOutLocation :	5A TODI ESTATE, Sun Mill Compound, Lower Parel, Mumbai, Maharashtra 400013, India
+PuncedInDevice :Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36	
+PunchedOutDevice: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36	
+WorkStation:	2
