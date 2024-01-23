@@ -71,3 +71,133 @@ public virtual List<GC_USP_GetCompanyUsersDetailReport_Result> GC_USP_GetCompany
                 , mothStartDateParameter, mothEndDateParameter, reportDateParameter
                 , isCustomParameter, userIdParameter, userIdsParameter, managerIdsParameter, userStatusParameter, deactiveUserIdsParameter, includeAllUsersParameter, punchedInDeviceParameter, punchedOutDeviceParameter);
         }
+
+
+
+SP 
+
+ALTER PROCEDURE [dbo].[GC_USP_GetCompanyUsersDetailReport_Backup1]    
+   @RequestByUserId INT ,  
+   @CompanyId INT,  
+   @MothStartDate DATETIME ,  
+   @MothEndDate DATETIME,  
+   @ReportDate DATETIME ,  
+   @IsCustom INT ,  
+   @UserId INT ,  
+   @UserIds NVARCHAR(2000),   
+   @ManagerIds NVARCHAR(2000),  
+   @UserStatus BIT ,  
+   @DeactiveUserIds NVARCHAR(2000),  
+   @IncludeAllUsers BIT ,
+   @PunchedInDevice NVARCHAR (2000),
+   @PunchedOutDevice NVARCHAR (2000)
+  AS                                                                            
+  BEGIN                                                                            
+                                                                               
+ SET NOCOUNT ON;                                                                            
+ SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED                                                                            
+                                                                               
+ IF(@MothStartDate IS NULL)                                                                            
+ BEGIN                                                                            
+  DECLARE @CurrentDate DATETIME,                                                                            
+  @Month INT,                                                                            
+  @Year INT,                                                                            
+  @DaysCount INT,  
+  @Total INT  
+                                                                               
+  SET @CurrentDate = @ReportDate                                                                            
+  SET @DaysCount = DAY(EOMONTH(@CurrentDate))                                                                            
+  SET @Year = DATEPART(yyyy, @CurrentDate)                                                                            
+  SET @Month = DATEPART(mm, @CurrentDate)                                                                            
+  SET @MothStartDate = CONCAT(@Month,'/1','/',@Year)                                                                            
+  SET @MothEndDate = CONCAT(@Month,'/',@DaysCount,'/',@Year)                                                                              
+ END                                                      
+                 
+ CREATE TABLE #TempUser                                                                            
+ (                                                                            
+  Rownumber INT                          
+  ,UserId INT                                                                            
+  ,UserName NVARCHAR(50)                          
+  ,ParentId INT                          
+  ,ManagerName NVARCHAR(50)                          
+ )                          
+                         
+ IF(@UserId = 0)                                                                          
+  SET @UserId = NULL                                                                          
+                     
+  INSERT INTO #TempUser                                                                            
+  SELECT                            
+  ROW_NUMBER() OVER(ORDER BY cmrm.UserId DESC) AS [RowNumber]                            
+  ,cmrm.UserId                                          
+  ,t.UserName AS UserName                          
+  ,t.ParentId AS ParentId                          
+  ,t.ManagerName AS ManagerName                    
+ FROM fn_GetMyTeam_CustomUserFilter(@RequestByUserId, @UserIds, @ManagerIds, @DeactiveUserIds, @IncludeAllUsers) t               
+ LEFT JOIN [dbo].[CompanyMemberRoleMapping] cmrm ON cmrm.UserId = t.UserId              
+ LEFT JOIN [dbo].[GCUserSetting] gcu ON cmrm.UserId = gcu.UserId              
+ WHERE ShopId = @CompanyId               
+--  AND cmrm.IsActive = 1                                                                            
+  AND (@UserId IS NULL OR gcu.UserId = @UserId)               
+                                                 
+ SELECT                                  
+  gc.Id                                
+  ,gc.UserId                                        
+  ,tu.ManagerName AS ManagerName                                    
+  ,u.Name AS UserName                                                        
+  ,u.EmployeeNo AS EmployeeNo                                                                                      
+  ,gc.IsCheckedIn                                      
+  ,gc.IsCheckedOut                                                                                
+  ,FORMAT(gc.CheckInLocalTime, 'dd-MMM-yyyy') AS [AttendanceDate]                      
+  ,DATENAME(dw,gc.CheckInLocalTime) AS [Day]                                                                              
+  ,gc.CheckInLocalTime AS  CheckInTime                                                                                    
+  ,gc.CheckOutLocalTime AS CheckOutTime                                                                            
+  ,TotalTime                                                                                        
+  ,WorkingMinutes                                                                                        
+  ,(CASE WHEN chk.Id = 1 AND (gc.WorkingMinutes BETWEEN 0 AND (gs.HalfDayHours * 60)) AND (gc.CheckOutTime IS NOT NULL) THEN 'HalfDay' ELSE chk.Name END) AS CheckInType                                    
+  ,gc.Report          
+  ,COALESCE(gc.PunchInReport,'') as PunchInReport      
+  ,COALESCE(ws.[Name],'') as Workstation    
+  ,IsModifiedByAdmin                                                                                      
+  ,gc.CheckInLatitude                                                                                  
+  ,gc.CheckInLongitude                                                                                  
+  ,gc.CheckOutLatitude                                                                        
+  ,gc.CheckOutLongitude                      
+  ,c.Name AS City                                                            
+  ,s.Name AS State                                                            
+  ,gc.CheckInLocation                                                          
+  ,gc.CheckOutLocation                                            
+  ,gcCheckin.Name AS CheckInGeoFence                                        
+  ,gcCheckout.Name AS CheckOutGeoFence                                  
+  ,ISNULL(gcr.Reason, '-') AS TimesheetReason                                                      
+  ,ISNULL(gcrApprover.Name,'NA' ) AS TimesheetApprovedBy                                                        
+  ,ISNULL(m.[Name], '') AS ModifiedBy   
+  ,gc.PunchedInDevice
+  ,gc.PunchedOutDevice
+ FROM                   
+ #TempUser tu              
+ INNER JOIN [dbo].[GCCheckInCheckOut] gc ON tu.UserId = gc.UserId              
+  --[dbo].[GCCheckInCheckOut] gc                                                  
+  --INNER JOIN #TempUser tu ON gc.UserId = tu.UserId                                        
+  INNER JOIN [dbo].[User] u ON gc.UserId = u.UserId                                                                                      
+  INNER JOIN [dbo].[GCCheckInType] chk ON gc.CheckInType = chk.Id                                                              
+  LEFT JOIN City c ON c.CityId = u.CityId                                                            
+  LEFT JOIN State s ON s.StateId = u.StateId                                
+  LEFT JOIN                          
+  (SELECT MAX(UserId) AS UserId, MAX(CheckInDate) AS CheckInDate, MAX(StatusId) AS StatusId, MAX(Reason) AS Reason, MAX(ApproverId) AS ApproverId FROM GCUserCheckInRequest GROUP BY UserId)                          
+  gcr ON gcr.UserId = gc.UserId AND CAST(gc.CheckInLocalTime AS DATE) = gcr.CheckInDate AND gcr.StatusId = 2                          
+  LEFT JOIN [User] gcrApprover ON gcr.ApproverId = gcrApprover.UserId                                          
+  LEFT JOIN [GCGeoFencing] gcCheckin ON gcCheckin.Id = gc.CheckInGeoFenceId                                        
+  LEFT JOIN [GCGeoFencing] gcCheckout ON gcCheckout.Id= gc.CheckOutGeoFenceId                                        
+  LEFT JOIN GCGlobalSetting gs ON @CompanyId = gs.CompanyId                                
+  LEFT JOIN [User] m ON gc.ModifiedBy = m.UserId     
+  LEFT JOIN [Workstation] ws on gc.WorkStationId = ws.Id    
+ WHERE                          
+  CAST(gc.CheckInLocalTime AS DATE) >= @MothStartDate                                                                    
+  AND  CAST(gc.CheckInLocalTime AS DATE) <= @MothEndDate                                                                          
+  AND (CAST(gc.CheckOutTime AS DATE) <= @MothEndDate  OR gc.CheckOutTime IS NULL)
+   AND (gc.PunchedInDevice is null) OR (gc.PunchedInDevice is NOT null)
+    AND (gc.PunchedOutDevice is null) OR (gc.PunchedOutDevice is NOT null)
+ ORDER BY                          
+  u.UserId DESC                          
+  ,gc.CheckInTime ASC                                      
+END 
