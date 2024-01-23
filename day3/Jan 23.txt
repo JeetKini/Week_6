@@ -1,0 +1,73 @@
+ public ResponseInfo GetAllUsersDetailReport(int loggedIdUserId, UserReport userReport)
+        {
+            ResponseInfo info = new ResponseInfo();
+
+            int companyId = Company.GetCompanyId(loggedIdUserId);
+
+            var userTimeZone = (new UserService()).GetUserTimeZone(userReport.userId); // User Time Zone
+
+            DateTime StartDate = (userReport.startDate) == null ? DateTime.UtcNow : userReport.startDate.Value;
+            DateTime EndDate = (userReport.endDate) == null ? DateTime.UtcNow : userReport.endDate.Value;
+            DateTime reportDate = (userReport.reportDate) == null ? DateTime.UtcNow : userReport.reportDate.Value;
+            var PunchedInDevice = db.GCCheckInCheckOuts.Where(x => x.UserId == loggedIdUserId).Select(x=>x.PunchedInDevice).FirstOrDefault();
+            var PunchedOutDevice = db.GCCheckInCheckOuts.Where(x => x.UserId == loggedIdUserId).Select(x => x.PunchedOutDevice).FirstOrDefault();
+            var allUsersDetailReportData = db.GC_USP_GetCompanyUsersDetailReport(companyId, loggedIdUserId, StartDate, EndDate, reportDate, 1, userReport.userId,PunchedInDevice, PunchedOutDevice).ToList();
+
+            if (allUsersDetailReportData.Count > 0)
+                info.SetSuccess(allUsersDetailReportData);
+
+            return info; 
+
+
+
+
+public virtual List<GC_USP_GetCompanyUsersDetailReport_Result> GC_USP_GetCompanyUsersDetailReport(int? companyId, int requestByUserId, Nullable<System.DateTime> mothStartDate, Nullable<System.DateTime> mothEndDate, Nullable<System.DateTime> reportDate, int? isCustom, int userId, string PunchedInDevice, string PunchedOutDevice, string userIds = "", string managerIds = "", bool userStatus = true, string deactiveUserIds = "", bool includeAllUsers = true )
+        {
+            var requestByUserIdParameter = new SqlParameter("RequestByUserId", requestByUserId);
+
+            var companyIdParameter = companyId.HasValue ?
+                new SqlParameter("CompanyId", companyId) :
+                new SqlParameter("CompanyId", SqlDbType.Int);
+
+            var mothStartDateParameter = mothStartDate.HasValue ?
+                new SqlParameter("MothStartDate", mothStartDate) :
+                new SqlParameter("MothStartDate", typeof(System.DateTime));
+
+            var mothEndDateParameter = mothEndDate.HasValue ?
+                new SqlParameter("MothEndDate", mothEndDate) :
+                new SqlParameter("MothEndDate", typeof(System.DateTime));
+
+            var reportDateParameter = reportDate.HasValue ?
+                new SqlParameter("ReportDate", reportDate) :
+                new SqlParameter("ReportDate", typeof(System.DateTime));
+
+            var isCustomParameter = isCustom.HasValue ?
+                new SqlParameter("IsCustom", isCustom) :
+                new SqlParameter("IsCustom", SqlDbType.Int);
+
+            var userIdParameter = new SqlParameter("UserId", userId);
+
+            var punchedInDeviceParameter = !string.IsNullOrEmpty(PunchedInDevice)
+            ? new SqlParameter("PunchedInDevice", PunchedInDevice)
+            : new SqlParameter("PunchedInDevice", SqlDbType.NVarChar) ;
+
+            var punchedOutDeviceParameter = !string.IsNullOrEmpty(PunchedOutDevice)
+            ? new SqlParameter("PunchedOutDevice", PunchedOutDevice)
+            : new SqlParameter("PunchedOutDevice", SqlDbType.NVarChar);
+
+
+            var userIdsParameter = DataProvider.GetStringSqlParameter("UserIds", userIds);
+
+            var managerIdsParameter = DataProvider.GetStringSqlParameter("ManagerIds", managerIds);
+
+            var userStatusParameter = DataProvider.GetBoolSqlParameter("UserStatus", userStatus);
+
+            var deactiveUserIdsParameter = DataProvider.GetStringSqlParameter("DeactiveUserIds", deactiveUserIds);
+            var includeAllUsersParameter = DataProvider.GetBoolSqlParameter("IncludeAllUsers", includeAllUsers);
+           
+
+            return ExecuteStoredProcedureList<GC_USP_GetCompanyUsersDetailReport_Result>
+                ("GC_USP_GetCompanyUsersDetailReport_Backup1", requestByUserIdParameter, companyIdParameter
+                , mothStartDateParameter, mothEndDateParameter, reportDateParameter
+                , isCustomParameter, userIdParameter, userIdsParameter, managerIdsParameter, userStatusParameter, deactiveUserIdsParameter, includeAllUsersParameter, punchedInDeviceParameter, punchedOutDeviceParameter);
+        }
