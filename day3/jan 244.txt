@@ -1,0 +1,225 @@
+select * from crmleadmapping
+where userid=1234
+
+update crmleadmapping set userid=newuserid where id =1234
+
+FROM 
+
+
+
+  [HttpPost]
+        [Route("AssignLead")]
+        [ResponseType(typeof(ResponseInfo))]
+        public IHttpActionResult AssignLead(AssignLeadModel assignLead)
+        {
+            assignLead.AssignById = userId;
+            ResponseInfo info = _leadMapingService.AssignLead(corpName, companyId, assignLead);
+            return Ok(info);
+        }
+
+
+ public ResponseInfo AssignLead(string corpName, int companyId, AssignLeadModel assignLead)
+        {
+            ResponseInfo result = new ResponseInfo();
+            try
+            {
+                List<CRMLeadMapping> crmLeadMappings = new List<CRMLeadMapping>();
+
+                string leadIds = "";
+                if (assignLead.Ids.Count() > 0)
+                {
+                    foreach (int leadId in assignLead.Ids)
+                    {
+                        if (leadIds == "")
+                            leadIds = leadId.ToString() + ',';
+                        else
+                            leadIds = leadIds + leadId.ToString() + ',';
+                    }
+                    using (ChatOnGoEntities db = new ChatOnGoEntities())
+                    {
+                        db.CRM_Usp_AssignLeads(leadIds, assignLead.UserId, assignLead.AssignById);
+                    }
+                    var datetime = DateTime.UtcNow.ToString("MM/dd/yyyy hh:mm:ss tt").Replace("-", "/");
+
+                    if (currentUserId != assignLead.UserId)
+                    {
+                        Task t = new Task(() => _leadTransactionService.AddLeadTransactionByLeadAssign(assignLead));
+                        t.Start();
+
+                        Task t1 = new Task(() => SendNotificationOnAssignLead(corpName, companyId, assignLead.AssignById, assignLead.UserId, assignLead.Ids.Count(), datetime));
+                        t1.Start();
+                    }
+
+                    result.SetSuccess("");
+                }
+
+            }
+
+
+
+ public virtual int CRM_Usp_AssignLeads(string leadIds, int? userId, int? assignById)
+        {
+            var leadIdsParameter = leadIds != null ?
+                new SqlParameter("LeadIds", leadIds) :
+                new SqlParameter("LeadIds", SqlDbType.VarChar);
+
+            var userIdParameter = userId.HasValue ?
+                new SqlParameter("UserId", userId) :
+                new SqlParameter("UserId", SqlDbType.Int);
+
+            var assignByIdParameter = assignById.HasValue ?
+                new SqlParameter("AssignById", assignById) :
+                new SqlParameter("AssignById", SqlDbType.Int);
+
+            return ExecuteSQLCommand("CRM_Usp_AssignLeads", leadIdsParameter, userIdParameter, assignByIdParameter);
+        }
+
+
+
+STORE PROCEDURE :
+
+ CREATE PROCEDURE [dbo].[CRM_Usp_AssignLeads]    
+   @LeadIds VARCHAR(500),    
+   @UserId INT,    
+   @AssignById INT    
+  AS    
+  BEGIN    
+    
+   SET NOCOUNT ON;    
+   SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED    
+    
+   DECLARE @CompanyId INT = 0;    
+   SELECT @CompanyId = ShopId FROM CompanyMemberRoleMapping WHERE UserId = @UserId    
+        
+    
+   UPDATE  [dbo].[CRMLeadMapping]    
+   SET UserId = @UserId , [ModifiedDate] = GETUTCDATE()    
+   WHERE LeadId IN (SELECT Id FROM [dbo].[SplitString](@LeadIds,','))    
+    
+   UPDATE  [dbo].CRMLead    
+   SET [ModifiedDate] = GETUTCDATE()    
+   WHERE Id IN (SELECT Id FROM [dbo].[SplitString](@LeadIds,','))    
+    
+   UPDATE  [dbo].[CRMLeadRoster]    
+   SET UserId = @UserId , [ModifiedDate] = GETUTCDATE()    
+   WHERE RosterStatusId = 1 AND LeadId IN (SELECT Id FROM [dbo].[SplitString](@LeadIds,','))    
+    
+    
+   INSERT INTO [dbo].[CRMLeadMapping]    
+       ( [UserId]    
+        ,[LeadId]    
+        ,[AssignById]    
+        ,[CreatedDate]    
+        ,[CreatedBy]    
+        ,[ModifiedBy]    
+        ,[ModifiedDate]    
+        ,[IsActive])     
+   SELECT   @UserId,     
+              l.Id,     
+              @AssignById,    
+              GETDATE(),     
+       @AssignById,    
+              @AssignById,    
+              GETDATE(),    
+       1    
+   FROM  [dbo].[SplitString](@LeadIds,',') l    
+   WHERE NOT EXISTS (SELECT  1 FROM [dbo].[CRMLeadMapping] clm     
+        WHERE l.Id = clm.LeadId)    
+    
+  END    
+
+
+
+public ResponseInfo AddLeadTransactionByLeadAssign(AssignLeadModel assignLead)
+        {
+            ResponseInfo result = new ResponseInfo();
+            try
+            {
+                List<CRMLeadTransaction> crmLeadTransactions = new List<CRMLeadTransaction>();
+
+                var assignUser = Users.GetUserById(assignLead.AssignById);
+
+                var user = Users.GetUserById(assignLead.UserId);
+                using (ChatOnGoEntities db = new ChatOnGoEntities())
+                {
+                    foreach (int leadId in assignLead.Ids)
+                    {
+                        GetLeadsModel lead = new GetLeadsModel();
+                        lead.LeadId = leadId;
+                        lead.UserId = assignLead.AssignById;
+                        var leadData = _leadService.GetLead(lead);
+
+                        if (leadData != null)
+                        {
+                            CRMLeadTransaction crmLeadTransaction = new CRMLeadTransaction();
+
+                            //"{0} : {1} has assigned a lead to {2}"
+                            crmLeadTransaction.Note = string.Format(GlobalConstant.LeadAssignment.ToString(), leadData.LeadName, assignUser.Name, user.Name);
+
+                            crmLeadTransaction.UserId = assignLead.UserId;
+                            crmLeadTransaction.LeadId = leadId;
+                            crmLeadTransaction.StatusId = 3;
+                            crmLeadTransaction.Latitude = leadData.Latitude;
+                            crmLeadTransaction.Longitude = leadData.Longitude;
+                            crmLeadTransaction.CreatedDate = DateTime.UtcNow;
+                            crmLeadTransaction.CreatedBy = assignLead.AssignById;
+                            crmLeadTransaction.ParentId = 0;
+                            crmLeadTransaction.IsActive = true;
+
+                            crmLeadTransactions.Add(crmLeadTransaction);
+                        }
+                    }
+                    db.CRMLeadTransactions.AddRange(crmLeadTransactions);
+                    db.SaveChanges();
+                }
+                result.SetSuccess("");
+            }
+            catch (Exception ex)
+            {
+                result = ExceptionLogging.SetException(ex);
+            }
+            return result;
+        }
+
+
+
+ private void SendNotificationOnAssignLead(string corpName, int companyId, int assignByUserId, int assignedToUserId, int leadCount, string datetime)
+        {
+            try
+            {
+                var notificationObj = new AssignLeadNotificationMessage
+                {
+                    CorpName = corpName,
+                    UserId = assignByUserId,
+                    LeadCount = leadCount,
+                    CompanyId = companyId,
+                    AssignedToUserId = assignedToUserId,
+                    NotificationType = (int)GlobalConstant.NotificationType.AssignLead
+                };
+
+                var eventPubliser = new EventPublisher();
+                eventPubliser.PublishEvents(notificationObj);
+                UtilityHelper.LogToFile("Assign Lead Notification");
+            }
+            catch (Exception ex)
+            {
+                UtilityHelper.LogToFile("Assign Lead RabbitMQ error");
+                ExceptionLogging.LogExceptionToDB(ex);
+            }
+        }
+
+
+
+  public class AssignLeadModel
+    {
+        public int UserId { get; set; }
+        public int TerritoryId { get; set; }
+        public int[] Ids { get; set; }
+        public int AssignById { get; set; }
+    }
+
+
+
+
+
+ 
