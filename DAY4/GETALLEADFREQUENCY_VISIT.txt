@@ -1,0 +1,85 @@
+ [HttpPost]
+        [Route("GetAllLeadFrequencyVisitReport")]
+        [ResponseType(typeof(ResponseInfo))]
+        public IHttpActionResult GetAllLeadFrequencyVisitReport(GetLeadCoverage lead)
+        {
+            int TotalRecords = 0;
+            lead.UserId = userId;
+            ResponseInfo info = _leadReportService.GetAllLeadFrequencyVisitReport(lead, out TotalRecords);
+            return Ok(info);
+        }
+
+
+
+ public ResponseInfo GetAllLeadFrequencyVisitReport(GetLeadCoverage lead, out int TotalRecords)
+        {
+            ResponseInfo result = new ResponseInfo();
+            try
+            {
+                lead.UserIds = string.IsNullOrEmpty(lead.UserIds) ? null : lead.UserIds;
+                lead.FromDate = lead.FromDate ?? lead.FromDate;
+                lead.ToDate = lead.ToDate ?? lead.ToDate;
+               
+
+                var leads = LeadReport.GetAllLeadFrequencyVisitReport(lead.UserId, lead.UserIds, lead.From, lead.To, lead.FromDate, lead.ToDate, lead.ManagerIds, out TotalRecords);
+
+                if (leads.Count > 0)
+                {
+                    var data = new
+                    {
+                        TotalRecords = TotalRecords,
+                        Leads = leads
+                    };
+                    result.SetSuccess(data);
+                }
+            }
+            catch (Exception ex)
+            {
+                result = ExceptionLogging.SetException(ex);
+                TotalRecords = 0;
+            }
+            return result;
+        }
+
+
+public static List<LeadFrequencyModel> GetAllLeadFrequencyVisitReport(int userId, string userIds, int from, int to, DateTime? fromDate, DateTime? toDate,string managerIds,  out int TotalRecords)
+        {
+
+            using (ChatOnGoEntities db = new ChatOnGoEntities())
+            {
+
+                SqlParameter UserId = new SqlParameter("@UserId", userId);
+                SqlParameter UserIds = new SqlParameter("@UserIds", (object)userIds ?? DBNull.Value);
+                SqlParameter From = new SqlParameter("@From", from);
+                SqlParameter To = new SqlParameter("@To", to);
+                SqlParameter FromDate = new SqlParameter("@FromDate", (object)fromDate ?? DBNull.Value);
+                SqlParameter ToDate = new SqlParameter("@ToDate", (object)toDate ?? DBNull.Value);
+                SqlParameter ManagerIds = new SqlParameter("@ManagerIds", (object)managerIds ?? DBNull.Value);
+
+
+                SqlParameter totalRecords = new SqlParameter();
+                totalRecords.ParameterName = "TotalRecords";
+                totalRecords.SqlDbType = System.Data.SqlDbType.Int;
+                totalRecords.Direction = System.Data.ParameterDirection.Output;
+
+                var sqlParams = new object[]
+                {
+                         UserId
+                        ,UserIds
+                        ,From
+                        ,To
+                        ,FromDate
+                        ,ToDate
+                        ,ManagerIds
+                        ,totalRecords
+                };
+
+                var leads = db.Database.SqlQuery<LeadFrequencyModel>(
+                    @"exec CRM_Usp_GetAllLeadFrequencyVisitReport @UserId, @UserIds, @From, @To, @FromDate, @ToDate, @ManagerIds,@TotalRecords out",
+                    sqlParams).ToList();
+
+                TotalRecords = Convert.IsDBNull(totalRecords) ? 0 : Convert.ToInt32(totalRecords.Value);
+
+                return leads;
+            }
+        }
